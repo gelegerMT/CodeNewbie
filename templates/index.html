@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TOTP & QR Generator</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 2rem; line-height: 1.5; }
+      header { margin-bottom: 1rem; }
+      form { display: grid; gap: 0.75rem; max-width: 560px; }
+      label { display: grid; gap: 0.25rem; font-weight: 600; }
+      input { padding: 0.5rem 0.6rem; font-size: 1rem; border: 1px solid #c9c9c9; border-radius: 6px; }
+      button { margin-top: 0.5rem; padding: 0.6rem 0.9rem; font-size: 1rem; border: 1px solid #1a73e8; background: #1a73e8; color: white; border-radius: 6px; cursor: pointer; }
+      button.secondary { background: white; color: #1a73e8; }
+      .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+      .card { margin-top: 1.25rem; padding: 1rem; border: 1px solid #e5e5e5; border-radius: 8px; max-width: 560px; }
+      .muted { color: #666; }
+      .code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 1.25rem; font-weight: 700; }
+      img.qr { image-rendering: pixelated; border: 1px solid #ddd; border-radius: 4px; }
+      .grid { display: grid; gap: 1rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>TOTP & QR Generator</h1>
+      <p class="muted">Generate a TOTP secret, current code, and an otpauth QR for authenticator apps.</p>
+    </header>
+
+    <form method="post">
+      <label>
+        Issuer (website or company)
+        <input type="text" name="issuer" placeholder="ExampleCorp" value="{{ issuer or '' }}" />
+      </label>
+      <label>
+        Account name (email or username)
+        <input type="text" name="account" placeholder="user@example.com" value="{{ account or '' }}" />
+      </label>
+      <label>
+        Secret (Base32). Leave empty to auto-generate
+        <input type="text" name="secret" placeholder="JBSWY3DPEHPK3PXP" value="{{ secret or '' }}" />
+      </label>
+      <div class="row">
+        <button type="submit">Generate</button>
+        {% if secret %}
+        <button class="secondary" type="button" id="copySecret">Copy Secret</button>
+        {% endif %}
+      </div>
+    </form>
+
+    {% if code or qr_data %}
+      <section class="card grid">
+        {% if code %}
+          <div>
+            <div class="muted">Current TOTP code</div>
+            <div class="code" id="totpCode">{{ code }}</div>
+            <div class="muted">Auto-refreshes every ~30s</div>
+          </div>
+        {% endif %}
+
+        {% if uri %}
+          <div>
+            <div class="muted">otpauth URI</div>
+            <div class="code" style="font-weight: 400; word-break: break-all;">{{ uri }}</div>
+          </div>
+        {% endif %}
+
+        {% if qr_data %}
+          <div class="row">
+            <img class="qr" alt="QR Code" src="data:image/png;base64,{{ qr_data }}" />
+          </div>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    {% if secret %}
+    <script>
+      const secret = {{ secret|tojson }};
+      const codeEl = document.getElementById('totpCode');
+      async function refreshCode() {
+        try {
+          const res = await fetch(`/api/totp?secret=${encodeURIComponent(secret)}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && data.code && codeEl) {
+            codeEl.textContent = data.code;
+          }
+        } catch (e) {}
+      }
+      setInterval(refreshCode, 5000);
+      document.getElementById('copySecret')?.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(secret); } catch (e) {}
+      });
+    </script>
+    {% endif %}
+  </body>
+  </html>
+
